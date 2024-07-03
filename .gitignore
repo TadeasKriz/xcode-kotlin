@@ -3,3 +3,4 @@
 .DS_Store
 .gradle
 build/
+cmake-build-debug/
