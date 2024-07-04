@@ -28,9 +28,5 @@ class KonanZerroSyntheticProvider(KonanBaseSyntheticProvider):
         log(lambda: "KonanZerroSyntheticProvider::to_string")
         return NULL
 
-    def to_short_string(self):
-        log(lambda: "KonanZerroSyntheticProvider::to_short_string")
-        return NULL
-
     def __getattr__(self, item):
         pass

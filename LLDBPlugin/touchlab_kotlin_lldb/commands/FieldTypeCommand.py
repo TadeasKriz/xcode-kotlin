@@ -7,10 +7,6 @@ from ..types.base import get_runtime_type
 class FieldTypeCommand:
     program = 'field_type'
 
-    @classmethod
-    def register_lldb_command(cls, debugger: SBDebugger, module_name):
-        debugger.HandleCommand('command script add -c {}.{} {}'.format(module_name, cls.__name__, cls.program))
-
     def __init__(self, debugger, unused):
         pass
 
@@ -31,7 +27,7 @@ class FieldTypeCommand:
 
         for field_name in fields[1:]:
             if variable is not None:
-                provider = KonanProxyTypeProvider(variable, internal_dict)
+                provider = KonanProxyTypeProvider(variable, {})
                 field_index = provider.get_child_index(field_name)
                 variable = provider.get_child_at_index(field_index)
             else:

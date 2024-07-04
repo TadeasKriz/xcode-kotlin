@@ -2,12 +2,9 @@ import re
 
 from lldb import SBDebugger, SBExecutionContext, SBCommandReturnObject
 
+
 class SymbolByNameCommand:
     program = 'symbol_by_name'
-
-    @classmethod
-    def register_lldb_command(cls, debugger: SBDebugger, module_name):
-        debugger.HandleCommand('command script add -c {}.{} {}'.format(module_name, cls.__name__, cls.program))
 
     def __init__(self, debugger, unused):
         pass

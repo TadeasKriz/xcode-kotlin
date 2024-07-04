@@ -17,3 +17,5 @@ class LLDBCache:
         self._debug_buffer_size = None
         self._string_symbol_addr = None
         self._list_symbol_addr = None
+        self._map_symbol_addr = None
+        self._helper_types_declared = False

@@ -1,7 +1,7 @@
 import sys
 import os
 
-logging = True
+logging = False
 exe_logging = os.getenv('GLOG_log_dir') is not None
 
 

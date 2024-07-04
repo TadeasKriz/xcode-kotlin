@@ -1,4 +1,4 @@
-from lldb import SBDebugger
+from lldb import SBDebugger, SBTarget, SBProcess, SBExecutionContext, SBStream
 
 from .KonanStepIn import KonanStepIn
 from .KonanStepOut import KonanStepOut
@@ -14,18 +14,10 @@ PLAN_FROM_STOP_REASON = {
 
 
 class KonanHook:
-    @classmethod
-    def register_stop_hook(cls, debugger: SBDebugger, module_name):
-        # Avoid Kotlin/Native runtime
-        debugger.HandleCommand('settings set target.process.thread.step-avoid-regexp ^::Kotlin_')
-        debugger.HandleCommand('target stop-hook add -P {}.{}'.format(module_name, cls.__name__))
-
-    def __init__(self, target, extra_args, _):
+    def __init__(self, target: SBTarget, extra_args, _):
         pass
 
-    def handle_stop(self, execution_context, stream) -> bool:
-        execution_context.frame.Clear()
-
+    def handle_stop(self, execution_context: SBExecutionContext, stream: SBStream) -> bool:
         is_bridging_functions_skip_enabled = not execution_context.target.GetEnvironment().Get(
             KONAN_LLDB_DONT_SKIP_BRIDGING_FUNCTIONS
         )

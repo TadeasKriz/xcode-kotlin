@@ -1,10 +1,12 @@
 import os
+import subprocess
 
 from lldb import SBDebugger, SBTarget, LLDB_ARCH_DEFAULT, SBEvent, SBListener, SBProcess, eStateStopped
-from touchlab_kotlin_lldb import __lldb_init_module
 
-exe = '/Users/tadeaskriz/Library/Developer/Xcode/DerivedData/KaMPKitiOS-eantjetnniifucfzdwialmcepcxt/Build/Products/Debug/KaMPKitiOS.app/Contents/MacOS/KaMPKitiOS'
-framework_path = '/Users/tadeaskriz/Library/Developer/Xcode/DerivedData/KaMPKitiOS-eantjetnniifucfzdwialmcepcxt/Build/Products/Debug'
+gradle_invoke = subprocess.Popen(['./gradlew', 'linkDebugExecutableMacosArm64'], cwd='test_project')
+gradle_invoke.wait()
+
+exe = 'test_project/build/bin/macosArm64/debugExecutable/test_project.kexe'
 
 # Initialize the debugger before making any API calls.
 SBDebugger.Initialize()
@@ -19,25 +21,21 @@ debugger: SBDebugger = SBDebugger.Create()
 # a little tricky.  We do this by setting the async mode to false.
 debugger.SetAsync(False)
 
-# Next, do whatever work this module should do when run as a command.
+# Import our module
 debugger.HandleCommand('command script import touchlab_kotlin_lldb')
 
 target: SBTarget = debugger.CreateTargetWithFileAndArch(exe, LLDB_ARCH_DEFAULT)
 
 if target:
-    breakpoint = target.BreakpointCreateByLocation('Weird.kt', 32)
-    print(breakpoint)
-    target.EnableAllBreakpoints()
+    target.BreakpointCreateByLocation('main.kt', 13)
 
-    process = target.LaunchSimple(None, ['DYLD_FRAMEWORK_PATH={}'.format(framework_path)], os.getcwd())
+    process = target.LaunchSimple(None, None, os.getcwd())
 
     if process:
-        debugger.HandleCommand('fr v --ptr-depth 9 -- dataList')
-        # debugger.HandleCommand('fr v --ptr-depth 9 -- dataList->backing')
+        debugger.HandleCommand('fr v --ptr-depth 16')
+        # debugger.HandleCommand('fr v --ptr-depth 16 -- data')
 
         process.Kill()
-
-        # my_thread.join()
 
 # Finally, dispose of the debugger you just made.
 SBDebugger.Destroy(debugger)

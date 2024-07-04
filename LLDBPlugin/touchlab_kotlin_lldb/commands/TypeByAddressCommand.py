@@ -7,10 +7,6 @@ from ..util import log
 class TypeByAddressCommand:
     program = 'type_by_address'
 
-    @classmethod
-    def register_lldb_command(cls, debugger: SBDebugger, module_name):
-        debugger.HandleCommand('command script add -c {}.{} {}'.format(module_name, cls.__name__, cls.program))
-
     def __init__(self, debugger, internal_dict):
         pass
 

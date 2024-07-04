@@ -27,10 +27,6 @@ __TYPES_KONAN_TO_C = {
 class KonanGlobalsCommand:
     program = 'konan_globals'
 
-    @classmethod
-    def register_lldb_command(cls, debugger: SBDebugger, module_name):
-        debugger.HandleCommand('command script add -c {}.{} {}'.format(module_name, cls.__name__, cls.program))
-
     def __init__(self, debugger, unused):
         pass
 
@@ -69,6 +65,6 @@ class KonanGlobalsCommand:
             address = getter_functions[0].function.GetStartAddress().GetLoadAddress(target)
             type = __KONAN_VARIABLE_TYPE.search(getters[0].name).group(2)
             (c_type, extractor) = __TYPES_KONAN_TO_C[type] if type in __TYPES_KONAN_TO_C.keys() else ('ObjHeader *', lambda v: kotlin_object_type_summary(v))
-            value = evaluate('(({0} (*)()){1:#x})()'.format(c_type, address))
+            value = evaluate('(({0} (*)()){1:#x})()', c_type, address)
             str_value = extractor(value)
             result.AppendMessage('{} {}: {}'.format(type, name, str_value))

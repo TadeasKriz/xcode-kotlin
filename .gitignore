@@ -4,3 +4,4 @@
 .gradle
 build/
 cmake-build-debug/
+.kotlin

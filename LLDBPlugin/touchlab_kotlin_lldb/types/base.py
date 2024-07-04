@@ -5,19 +5,20 @@ from ..util import strip_quotes, log, evaluate
 from ..cache import LLDBCache
 
 KOTLIN_NATIVE_TYPE = 'ObjHeader *'
+KOTLIN_NATIVE_TYPE_SPECIFIER = SBTypeNameSpecifier(KOTLIN_NATIVE_TYPE, lldb.eMatchTypeNormal)
 KOTLIN_CATEGORY = 'Kotlin'
 
 _TYPE_CONVERSION = [
-    lambda obj, value, address, name: value.CreateValueFromExpression(name, "(void *){:#x}".format(address)),
+    lambda obj, value, address, name: value.CreateValueFromExpression(name, "(__konan_safe_void_t *){:#x}".format(address)),
     lambda obj, value, address, name: value.CreateValueFromAddress(name, address, value.type),
     lambda obj, value, address, name: value.CreateValueFromExpression(name, "(int8_t *){:#x}".format(address)),
     lambda obj, value, address, name: value.CreateValueFromExpression(name, "(int16_t *){:#x}".format(address)),
     lambda obj, value, address, name: value.CreateValueFromExpression(name, "(int32_t *){:#x}".format(address)),
     lambda obj, value, address, name: value.CreateValueFromExpression(name, "(int64_t *){:#x}".format(address)),
-    lambda obj, value, address, name: value.CreateValueFromExpression(name, "(float *){:#x}".format(address)),
-    lambda obj, value, address, name: value.CreateValueFromExpression(name, "(double *){:#x}".format(address)),
-    lambda obj, value, address, name: value.CreateValueFromExpression(name, "(void **){:#x}".format(address)),
-    lambda obj, value, address, name: value.CreateValueFromExpression(name, "(bool *){:#x}".format(address)),
+    lambda obj, value, address, name: value.CreateValueFromExpression(name, "(__konan_safe_float_t *){:#x}".format(address)),
+    lambda obj, value, address, name: value.CreateValueFromExpression(name, "(__konan_safe_double_t *){:#x}".format(address)),
+    lambda obj, value, address, name: value.CreateValueFromExpression(name, "(__konan_safe_void_t **){:#x}".format(address)),
+    lambda obj, value, address, name: value.CreateValueFromExpression(name, "(__konan_safe_bool_t *){:#x}".format(address)),
     lambda obj, value, address, name: None
 ]
 
@@ -36,16 +37,7 @@ _TYPES = [
 
 
 def get_runtime_type(variable):
-    return strip_quotes(evaluate("(char *)Konan_DebugGetTypeName({:#x})".format(variable.unsigned)).summary)
-
-
-def get_field_address(parent: SBValue, index):
-    return evaluate('(void*)Konan_DebugGetFieldAddress({:#x}, {})'.format(parent.unsigned, index)).unsigned
-
-
-def get_field_type(parent: SBValue, index):
-    return evaluate('(int)Konan_DebugGetFieldType({:#x}, {})'.format(parent.unsigned, index)).unsigned
-
+    return strip_quotes(evaluate("(char *)Konan_DebugGetTypeName({:#x})", variable.unsigned).summary)
 
 def _symbol_loaded_address(name, debugger):
     target = debugger.GetSelectedTarget()
@@ -76,15 +68,11 @@ def GetListSymbolAddress() -> int:
     return self._list_symbol_addr
 
 
-def is_string_or_array(value):
-    soa = evaluate(
-        "(int)Konan_DebugIsInstance({0:#x}, {1:#x}) ? 1 : ((int)Konan_DebugIsArray({0:#x}) ? 2 : 0)".format(
-            value.unsigned,
-            GetStringSymbolAddress(),
-        )
-    ).unsigned
-    log(lambda: "is_string_or_array:{:#x}:{}".format(value.unsigned, soa))
-    return soa
+def GetMapSymbolAddress() -> int:
+    self = LLDBCache.instance()
+    if self._map_symbol_addr is None:
+        self._map_symbol_addr = _symbol_loaded_address('kclass:kotlin.collections.Map', lldb.debugger)
+    return self._map_symbol_addr
 
 
 class KnownValueType:
@@ -92,44 +80,51 @@ class KnownValueType:
     STRING = 1
     ARRAY = 2
     LIST = 3
+    MAP = 4
 
-    entries = [ANY, STRING, ARRAY, LIST]
+    entries = [ANY, STRING, ARRAY, LIST, MAP]
 
     @staticmethod
     def value_of(raw: int):
-        assert KnownValueType.ANY <= raw <= KnownValueType.LIST
+        assert KnownValueType.ANY <= raw <= KnownValueType.MAP
         return KnownValueType.entries[raw]
 
 
 def get_known_type(value: SBValue):
-    is_string = '(int)Konan_DebugIsInstance({:#x}, {:#x}) ? {}'.format(
+    is_string = '(__konan_safe_int_t)Konan_DebugIsInstance({:#x}, {:#x}) ? {}'.format(
         value.unsigned,
         GetStringSymbolAddress(),
         KnownValueType.STRING,
     )
-    is_array = '(int)Konan_DebugIsArray({:#x}) ? {}'.format(
+    is_array = '(__konan_safe_int_t)Konan_DebugIsArray({:#x}) ? {}'.format(
         value.unsigned,
         KnownValueType.ARRAY,
     )
-    is_list = '(int)Konan_DebugIsInstance({:#x}, {:#x}) ? {}'.format(
+    is_list = '(__konan_safe_int_t)Konan_DebugIsInstance({:#x}, {:#x}) ? {}'.format(
         value.unsigned,
         GetListSymbolAddress(),
         KnownValueType.LIST,
     )
+    is_map = '(__konan_safe_int_t)Konan_DebugIsInstance({:#x}, {:#x}) ? {}'.format(
+        value.unsigned,
+        GetMapSymbolAddress(),
+        KnownValueType.MAP,
+    )
 
     raw = evaluate(
-        '{} : {} : {} : {}'.format(
-            is_string,
-            is_array,
-            is_list,
-            KnownValueType.ANY,
-        )
+        '{} : {} : {} : {} : {}',
+        is_string,
+        is_array,
+        is_list,
+        is_map,
+        KnownValueType.ANY,
     ).unsigned
     log(lambda: "get_known_type:{}".format(raw))
     known_type = KnownValueType.value_of(raw)
     log(lambda: "get_known_type:{}".format(known_type))
     return known_type
 
+# did_it = False
 
 def type_info(value):
     """
@@ -139,8 +134,17 @@ def type_info(value):
     log(lambda: "type_info({:#x}: {})".format(value.unsigned, value.GetTypeName()))
     if value.GetTypeName() != KOTLIN_NATIVE_TYPE:
         return None
-    expr = "*(void **)((uintptr_t)(*(void**){0:#x}) & ~0x3) == **(void***)((uintptr_t)(*(void**){0:#x}) & ~0x3) " \
-           "? *(void **)((uintptr_t)(*(void**){0:#x}) & ~0x3) : (void *)0".format(value.unsigned)
-    result = evaluate(expr)
+    # global did_it
+    # if not did_it:
+    #     top_level_evaluate(
+    #         'typedef void __konan_safe_void_t;'
+    #         'typedef int __konan_safe_int_t;'
+    #     )
+    #     did_it = True
+    result = evaluate(
+        "*(__konan_safe_void_t**)((uintptr_t)(*(__konan_safe_void_t**){0:#x}) & ~0x3) == **(__konan_safe_void_t***)((uintptr_t)(*(__konan_safe_void_t**){0:#x}) & ~0x3) "
+        "? *(__konan_safe_void_t **)((uintptr_t)(*(__konan_safe_void_t**){0:#x}) & ~0x3) : (__konan_safe_void_t *)0",
+        value.unsigned
+    )
 
     return result.unsigned if result.IsValid() and result.unsigned != 0 else None
